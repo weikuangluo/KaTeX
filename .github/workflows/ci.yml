@@ -7,7 +7,7 @@ on:
     branches: [ master ]
   pull_request_target:
     branches: [ master ]
-    types: [ labeled ]
+    types: [ labeled ] # 'test screenshots' label on PRs from fork
 
 jobs:
   test:
@@ -65,52 +65,16 @@ jobs:
       !contains(toJSON(github.event.commits.*.message), '[ci skip]')
     outputs:
       matrix: ${{ steps.set-matrix.outputs.result }}
-    
+
     steps:
     - id: set-matrix
       uses: actions/github-script@v2
       with:
         github-token: ${{ secrets.GITHUB_TOKEN }}
         script: |
-          const SELENIUM_BROWSERS = ["chrome", "firefox"];
-          const BROWSERSTACK_BROWSERS = [{
-            browserName: "safari",
-            browser_version: "13.1",
-            os: "OS X",
-            os_version: "Catalina",
-          }];
-
-          const include = [];
-
-          if (context.eventName !== "pull_request_target") {
-            include.concat(SELENIUM_BROWSERS.map(b => ({
-              browser: b,
-              services: {selenium: {
-                image: `selenium/standalone-${b}:3.141.59-20200525`,
-                ports: ["4444:4444"],
-              }},
-            }));
-          }
-
-          // check access to Browserstack crendential secrets
-          if (context.eventName !== "pull_request" ||
-              context.payload.pull_request.head.repo.full_name === "KaTeX/KaTeX") {
-            if (context.eventName === "pull_request_target") {
-              github.issues.removeLabel({
-                issue_number: context.issue.number,
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                name: "test screenshots",
-              });
-            }
-            include.concat(BROWSERSTACK_BROWSERS.map(b => ({
-              browser: b.browserName,
-              services: {},
-              browserstack: b,
-            }));
-          }
-
-          return {browser: include.map(b => b.browser, include};
+          return require(`${
+              process.env.GITHUB_WORKSPACE
+            }/dockers/screenshotter/actions_dispatcher.js`)(github, context);
 
   screenshotter:
     runs-on: ubuntu-latest
@@ -164,7 +128,6 @@ jobs:
       with:
         name: new-${{ matrix.browser }}
         path: test/screenshotter/new
-
     - uses: actions/upload-artifact@v2
       if: failure()
       with:
